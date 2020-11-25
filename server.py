@@ -1,48 +1,109 @@
+#!/usr/bin/env python3
+
+import threading
 import socket
-import time
-import pickle
-from Crypto.Cipher import AES
+import argparse
+import os
 
-HEADERSIZE = 10
+class Server(threading.Thread):
 
-#key and AES object
-key = b'Sixteen byte key'
-cipher = AES.new(key, AES.MODE_EAX)
+    def __init__(self, host, port):
+        super().__init__()
+        self.connections = []
+        self.host = host
+        self.port = port
 
-#Encryption--------------------------------------
-#data to be encrypted
-data = b"joe"
+    def run(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((self.host, self.port))
 
-#create tuple with ciphertext and MAC
-ciphertext, tag = cipher.encrypt_and_digest(data)
+        sock.listen(1)
+        print('Listening at ', sock.getsockname())
 
-#Nonce used in transmission
-nonce = cipher.nonce
+        while True:
+            #Accept new connection
+            sc, sockname = sock.accept()
+            print(f'Accepted a new connection from {sc.getpeername()} to {sc.getsockname()}.')
 
-#tuple that will be sent to client
-d = ((ciphertext, tag, nonce))
+            #Create new thread
+            server_socket = ServerSocket(sc, sockname, self)
 
-#pack tuple so it can be sent as one to client
-msg = pickle.dumps(d)
-#------------------------------------------------
+            #Start new thread
+            server_socket.start()
 
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-#AF_INET corresponds to IPv4
-#SOCK_STREAM means we will be using TCP
+            #Add thread to active connections
+            self.connections.append(server_socket)
+            print('Ready to receive messages from', sc.getpeername())
+    def broadcast(self, message, source):
+        """
+        Sends a message to all connected clients, except the source of the message.
+        Args:
+            message (str): The message to broadcast.
+            source (tuple): The socket address of the source client.
+        """
+        for connection in self.connections:
 
-s.bind((socket.gethostname(), 1235))
-#hosting server on our machine, thats why gethostname
-#1234 is port number
+            # Send to all connected clients except the source client
+            if connection.sockname != source:
+                connection.send(message)
+    
+    def remove_connection(self, connection):
+        """
+        Removes a ServerSocket thread from the connections attribute.
+        Args:
+            connection (ServerSocket): The ServerSocket thread to remove.
+        """
+        self.connections.remove(connection)
 
-s.listen(5)
-#leaves a queue of 5 to receive
 
-while True:
-    clientsocket, address = s.accept() #clientsocket is another socket object
-    print(f"connection from {address} has been esablished!")
 
-    msg = bytes(f'{len(msg):<{HEADERSIZE}}', "utf-8") + msg
-    #the < above means left align
+class ServerSocket(threading.Thread):
 
-    clientsocket.send( msg )
+    def __init__(self, sc, sockname, server):
+        super().__init__()
+        self.sc = sc
+        self.sockname = sockname
+        self.server = server
 
+    def run(self):
+
+        while True:
+            message = self.sc.recv(1024).decode('ascii')
+            if message:
+                print('{} says {!r}'.format(self.sockname, message))
+                self.server.broadcast(message, self.sockname)
+            else:
+                # Client has closed the socket, exit the thread
+                print('{} has closed the connection'.format(self.sockname))
+                self.sc.close()
+                server.remove_connection(self)
+                return
+
+    def send(self, message):
+        self.sc.sendall(message.encode('ascii'))
+
+
+def exit(server):
+    while True:
+        ipt = input('')
+        if ipt == 'q':
+            print('Closing all connections...')
+            for connection in server.connections:
+                connection.sc.close()
+            print('Shutting down the server...')
+            os._exit(0)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Chatroom Server')
+    parser.add_argument('host', help='Interface the server listens at')
+    parser.add_argument('-p', metavar='PORT', type=int, default=1060,
+                        help='TCP port (default 1060)')
+    args = parser.parse_args()
+
+    # Create and start server thread
+    server = Server(args.host, args.p)
+    server.start()
+
+    exit = threading.Thread(target = exit, args = (server,))
+    exit.start()
