@@ -8,22 +8,24 @@ import os
 class Server(threading.Thread):
 
     def __init__(self, host, port):
-        super().__init__()
-        self.connections = []
-        self.host = host
-        self.port = port
+        super().__init__()          #initializes thread superclass constructor
+        self.connections = []       #list of all sockets the server is connected to
+        self.host = host            #host and port are passed in in the main function,
+        self.port = port            #   through command line arguments
 
     def run(self):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind((self.host, self.port))
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)    #creates server socket using internet addr family & TCP
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  #makes it so the socket can be reused at the specified port
+        sock.bind((self.host, self.port))                           #binds the server socket to the host & port
 
-        sock.listen(1)
-        print('Listening at ', sock.getsockname())
+        sock.listen(1)                              #listens for 1 (?) connection at a time... queue?
+        print('Listening at ', sock.getsockname())  #prints the IP address and port server is active on
 
         while True:
             #Accept new connection
-            sc, sockname = sock.accept()
+            #sc is the new socket that is connected from this server to
+            #   the client, sockname is the address of the client
+            sc, sockname = sock.accept()    
             print(f'Accepted a new connection from {sc.getpeername()} to {sc.getsockname()}.')
 
             #Create new thread
@@ -35,6 +37,7 @@ class Server(threading.Thread):
             #Add thread to active connections
             self.connections.append(server_socket)
             print('Ready to receive messages from', sc.getpeername())
+            
     def broadcast(self, message, source):
         """
         Sends a message to all connected clients, except the source of the message.
@@ -58,21 +61,21 @@ class Server(threading.Thread):
 
 
 
+#facilitates communications with individual sockets
 class ServerSocket(threading.Thread):
 
     def __init__(self, sc, sockname, server):
-        super().__init__()
-        self.sc = sc
-        self.sockname = sockname
-        self.server = server
+        super().__init__()                      #initializes threading superclass obj
+        self.sc = sc                            #this ServerSocket object is tied to the client that the server connected to 
+        self.sockname = sockname                #address of sc
+        self.server = server                    #server object that the client is connected to 
 
     def run(self):
-
         while True:
-            message = self.sc.recv(1024).decode('ascii')
-            if message:
-                print('{} says {!r}'.format(self.sockname, message))
-                self.server.broadcast(message, self.sockname)
+            message = self.sc.recv(1024)                   #server waits to receive a message of 1024 bytes
+            if message:                                                     #if the message isnt empty
+                print('{} says {!r}'.format(self.sockname, message))        #prints on server cmd line who said what
+                self.server.broadcast(message, self.sockname)               #broadcasts the message to all other clients
             else:
                 # Client has closed the socket, exit the thread
                 print('{} has closed the connection'.format(self.sockname))
@@ -81,10 +84,13 @@ class ServerSocket(threading.Thread):
                 return
 
     def send(self, message):
-        self.sc.sendall(message.encode('ascii'))
+        self.sc.sendall(message)    #sends the message passed in through the socket connected to the client
 
 
 def exit(server):
+    """
+    Allows the administrator to close the server if they type q in the cmd line
+    """
     while True:
         ipt = input('')
         if ipt == 'q':
