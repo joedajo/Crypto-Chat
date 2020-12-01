@@ -5,6 +5,8 @@ import socket
 import argparse
 import os
 
+HEADERSIZE = 10
+
 class Server(threading.Thread):
 
     def __init__(self, host, port):

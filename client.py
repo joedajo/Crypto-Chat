@@ -8,6 +8,8 @@ import pickle
 import time
 from Crypto.Cipher import AES
 
+HEADERSIZE = 10
+
 class Send(threading.Thread):
     """
     Thread to handle sending. This thread's blocking call is the input
@@ -40,7 +42,10 @@ class Send(threading.Thread):
 
             # Send message to server for broadcasting
             else:
-                self.sock.sendall('{}: {}'.format(self.name, packed_tuple).encode('ascii'))
+                formatted_msg = ('{}: {}'.format(self.name, packed_tuple).encode('ascii'))
+                formatted_msg = bytes(f'{len(formatted_msg):<{HEADERSIZE}}', "ascii") + formatted_msg
+    
+                self.sock.sendall(formatted_msg)
 
         print('\nQuitting...')
         self.sock.close()
@@ -59,11 +64,23 @@ class Receive(threading.Thread):
 
     def run(self):    
         key = b'Sixteen byte key'           #arbitrary key for testing purposes
+        full_msg = b''
+        new_msg = True
         while True:
-            message = self.sock.recv(1024)  #receives a 1024 byte message
+            while True:
+                message = self.sock.recv(1024)  #receives a 1024 byte message
+                if new_msg:
+                    msglen = int(message[:HEADERSIZE])
+                    new_msg = False
+                full_msg += message
+                if len(full_msg) - HEADERSIZE == msglen:
+                    print("full message: ", full_msg)
+                    ciphertext, tag, nonce = pickle.loads(full_msg[HEADERSIZE:])
+                    new_msg = True
+                    full_msg = b''
+                    break
             if message:
-                print('\r{}\n{}: '.format(message, self.name), end = '')
-                ciphertext, tag, nonce = pickle.loads(message)          #load the packed tuple
+                print('\r{}\n{}: '.format(ciphertext, self.name), end = '')
                 cipher = AES.new(key, AES.MODE_EAX, nonce = nonce)      #create a corresponding AES object
                 plaintext = cipher.decrypt(ciphertext)                  #decrypt the ciphertext, storing in plaintext
                 try:
