@@ -42,9 +42,8 @@ class Send(threading.Thread):
 
             # Send message to server for broadcasting
             else:
-                #formatted_msg = ('{}: {}'.format(self.name, packed_tuple).encode('ascii'))
-                formatted_msg = bytes(f'{len(packed_tuple):<{HEADERSIZE}}', "ascii") + packed_tuple
-    
+                formatted_msg = ('{}: {}'.format(self.name, packed_tuple).encode('ascii'))
+                formatted_msg = bytes(f'{len(formatted_msg):<{HEADERSIZE}}', "ascii") + formatted_msg
                 self.sock.sendall(formatted_msg)
 
         print('\nQuitting...')
@@ -74,9 +73,13 @@ class Receive(threading.Thread):
                     new_msg = False
                 full_msg += message
                 if len(full_msg) - HEADERSIZE == msglen:
-                    ciphertext, tag, nonce = pickle.loads(full_msg[HEADERSIZE:])
+                    print('full msg: ', full_msg)
+                    split_msg = full_msg[full_msg.decode('ascii').index(': ')+3:]
+                    print('Split message: ', split_msg)
+                    ciphertext, tag, nonce = pickle.loads(split_msg)
                     new_msg = True
                     full_msg = b''
+                    split_msg = []
                     break
             if message:
                 print('\r{}\n{}: '.format(ciphertext, self.name), end = '')
@@ -84,7 +87,7 @@ class Receive(threading.Thread):
                 plaintext = cipher.decrypt(ciphertext)                  #decrypt the ciphertext, storing in plaintext
                 try:
                     cipher.verify(tag)                                          #checks authenticity of message
-                    print('\r{}\n{}: '.format(plaintext, self.name), end = '')  #prints message
+                    print('\r{}\n{}: '.format(plaintext.decode('utf-8'), self.name), end = '')  #prints message
                 except:
                     print("Sender not authenticated, key incorrect or message corrupt. Quitting...") #if message is inauthentic
                     sys.exit(0)                                                                      #quit
