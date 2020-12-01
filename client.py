@@ -42,8 +42,8 @@ class Send(threading.Thread):
 
             # Send message to server for broadcasting
             else:
-                formatted_msg = ('{}: {}'.format(self.name, packed_tuple).encode('ascii'))
-                formatted_msg = bytes(f'{len(formatted_msg):<{HEADERSIZE}}', "ascii") + formatted_msg
+                #formatted_msg = ('{}: {}'.format(self.name, packed_tuple).encode('ascii'))
+                formatted_msg = bytes(f'{len(packed_tuple):<{HEADERSIZE}}', "ascii") + packed_tuple
     
                 self.sock.sendall(formatted_msg)
 
@@ -74,7 +74,6 @@ class Receive(threading.Thread):
                     new_msg = False
                 full_msg += message
                 if len(full_msg) - HEADERSIZE == msglen:
-                    print("full message: ", full_msg)
                     ciphertext, tag, nonce = pickle.loads(full_msg[HEADERSIZE:])
                     new_msg = True
                     full_msg = b''
