@@ -6,10 +6,15 @@ import argparse
 import os
 import json
 import time
+import random
+import math
+import hashlib
+import binascii
 from Crypto.Cipher import AES
 from base64 import b64encode
 from base64 import b64decode
 from Crypto.Random import get_random_bytes
+from Crypto.Hash import HMAC, SHA256
 
 HEADERSIZE = 10
 
@@ -82,7 +87,6 @@ class Receive(threading.Thread):
                 print("Incorrect decryption")
           
 class Client:
-
     def __init__(self, host, port):
         self.host = host                                                #host and port passed into command line
         self.port = port
@@ -93,11 +97,67 @@ class Client:
         self.sock.connect((self.host, self.port))
         print('Successfully connected to {}:{}'.format(self.host, self.port))
 
+        self.id = int(self.sock.recv(8))
+        timestamp = int(math.ceil(time.time()))
+        timestamp = int(timestamp/100)
+        random.seed(math.ceil(timestamp))
+        rand1 = random.getrandbits(64)
+        rand2 = random.getrandbits(64)
+        print('Timestamp/100: ', math.ceil(timestamp))
+        print('rand1: ', rand1)
+        print('rand2: ', rand2)
+        if(self.id == 0):
+            tohash = password + str(timestamp ^ rand1)
+            toverify = password + str(timestamp ^ rand2)
+            tohash = bytes(tohash, 'utf-8')
+            toverify = bytes(toverify, 'utf-8')
+            #send hash(key|timestamp+rand_1)
+            print('tohash: ', tohash)
+            print('toverify: ', toverify)
+            hash_object1 = hashlib.pbkdf2_hmac('sha256', tohash, b'salt', 100000)
+            hash_object2 = hashlib.pbkdf2_hmac('sha256', toverify, b'salt', 100000)
+            print('Hash1: ', binascii.hexlify(hash_object1))
+            print('Hash2: ', binascii.hexlify(hash_object2))
+            time.sleep(10)
+            self.sock.send(binascii.hexlify(hash_object1))
+            #recv other hash
+            msg_to_verify = self.sock.recv(1024)
+            #verify hash
+            if msg_to_verify == binascii.hexlify(hash_object2):
+                print('YAHOOOOOOOO')
+                print('msg to verify: ', msg_to_verify)
+            else:
+                print('FUCKKKKKK')
+                print('msg to verify: ', msg_to_verify)
+        else:
+            tohash = password + str(timestamp ^ rand2)
+            toverify = password + str(timestamp ^ rand1)
+            #send hash(key|timestamp+rand_2)
+            tohash = bytes(tohash, 'utf-8')
+            toverify = bytes(toverify, 'utf-8')
+            print('tohash: ', tohash)
+            print('toverify: ', toverify)
+            hash_object1 = hashlib.pbkdf2_hmac('sha256', tohash, b'salt', 100000)
+            hash_object2 = hashlib.pbkdf2_hmac('sha256', toverify, b'salt', 100000)
+            print('Hash1: ', binascii.hexlify(hash_object1))
+            print('Hash2: ', binascii.hexlify(hash_object2))
+            self.sock.send(binascii.hexlify(hash_object1))
+            #recv other hash
+            msg_to_verify = self.sock.recv(1024)
+            #verify hash
+            if msg_to_verify == binascii.hexlify(hash_object2):
+                print('YAHOOOOOOOO')
+                print('msg to verify: ', msg_to_verify)
+            else:
+                print('FUCKKKKKK')
+                print('msg to verify: ', msg_to_verify)
+
         print()
         name = input('Your name: ')
 
         print()
         print('Welcome, {}! Getting ready to send and receive messages...'.format(name))
+        print('Client ID: ', self.id)
 
         # Create send and receive threads
         send = Send(self.sock, name)

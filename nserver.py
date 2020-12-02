@@ -29,6 +29,7 @@ class Server(threading.Thread):
             #   the client, sockname is the address of the client
             sc, sockname = sock.accept()    
             print(f'Accepted a new connection from {sc.getpeername()} to {sc.getsockname()}.')
+            sc.send(bytes(str(len(self.connections)), 'utf-8'))
 
             #Create new thread
             server_socket = ServerSocket(sc, sockname, self)
