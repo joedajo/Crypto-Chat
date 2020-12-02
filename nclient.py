@@ -27,22 +27,22 @@ class Send(threading.Thread):
         self.name = name            #address of socket
 
     def run(self):
-        key = b'Sixteen byte key'   #arbitrary key for testing purposes
+        key = bytes(password, 'utf-8')   #arbitrary key for testing purposes
         while True:
             message = input('{}: '.format(self.name))
             cipher = AES.new(key, AES.MODE_EAX)                         #create AES object
-            message_bytes = bytes(message, 'ascii')                     #transfer user input into bytes
+            message_bytes = bytes(message, 'utf-8')                     #transfer user input into bytes
             ciphertext, tag = cipher.encrypt_and_digest(message_bytes)
             nonce = cipher.nonce
-            json_k = [ 'nonce', 'ciphertext', 'tag' ]
-            json_v = [ b64encode(x).decode('utf-8') for x in [cipher.nonce, ciphertext, tag]]
+            json_k = [ 'name', 'nonce', 'ciphertext', 'tag' ]
+            json_v = [ b64encode(x).decode('utf-8') for x in (bytes(self.name, 'utf-8'), cipher.nonce, ciphertext, tag)]
             result = json.dumps(dict(zip(json_k, json_v)))
             print(result)
-            msg = bytes(result, 'ascii')
+            msg = bytes(result, 'utf-8')
 
             # Type 'QUIT' to leave the chatroom
             if message == 'QUIT':
-                self.sock.sendall('Server: {} has left the chat.'.format(self.name).encode('ascii'))
+                self.sock.sendall('Server: {} has left the chat.'.format(self.name).encode('utf-8'))
                 break
 
             # Send message to server for broadcasting
@@ -68,17 +68,17 @@ class Receive(threading.Thread):
         self.name = name            #address of sock
 
     def run(self):    
-        key = b'Sixteen byte key'           #arbitrary key for testing purposes
+        key = bytes(password, 'utf-8')        #arbitrary key for testing purposes
         while True:
             message = self.sock.recv(1024)
             try:
                 b64 = json.loads(message)
-                json_k = [ 'nonce', 'ciphertext', 'tag' ]
+                json_k = [ 'name', 'nonce', 'ciphertext', 'tag' ]
                 jv = {k:b64decode(b64[k]) for k in json_k}
-                cipher = AES.new(key, AES.MODE_GCM, nonce=jv['nonce'])
+                cipher = AES.new(key, AES.MODE_EAX, nonce=jv['nonce'])
                 plaintext = cipher.decrypt_and_verify(jv['ciphertext'], jv['tag'])
-                print("The message was: " + plaintext)
-            except:
+                print(f"\n{jv['name'].decode('utf-8')}: " + plaintext.decode('utf-8'))
+            except (ValueError, KeyError):
                 print("Incorrect decryption")
           
 class Client:
@@ -114,9 +114,12 @@ class Client:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Chatroom Server')
     parser.add_argument('host', help='Interface the server listens at')
+    parser.add_argument('password', help='Password you share with the other user')
     parser.add_argument('-p', metavar='PORT', type=int, default=1060,
                         help='TCP port (default 1060)')
     args = parser.parse_args()
-
+    
+    global password
+    password = args.password
     client = Client(args.host, args.p)
     client.start()
