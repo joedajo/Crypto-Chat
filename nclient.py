@@ -6,6 +6,7 @@ import argparse
 import os
 import json
 import time
+import datetime
 import random
 import math
 import hashlib
@@ -17,8 +18,6 @@ from base64 import b64decode
 from Crypto.Random import get_random_bytes
 from Crypto.Hash import HMAC, SHA256
 
-HEADERSIZE = 10
-
 class Send(threading.Thread):
     """
     Thread to handle sending. This thread's blocking call is the input
@@ -29,22 +28,20 @@ class Send(threading.Thread):
     def __init__(self, sock, name):
         super().__init__()          #initialize thread superclass
         self.sock = sock            #connected to the socket the client class is connected to,
-                                    #   uses the socket to send the messages to the server
         self.name = name            #address of socket
 
     def run(self):
-        #key = bytes(password, 'utf-8')   #arbitrary key for testing purposes
         while True:
             message = input('{}: '.format(self.name))
-            cipher = AES.new(key, AES.MODE_EAX)                         #create AES object
-            message_bytes = bytes(message, 'utf-8')                     #transfer user input into bytes
+            cipher = AES.new(sessionkey, AES.MODE_EAX)                         #create AES object
+            message_bytes = bytes(message, 'utf-8')                            #transfer user input into bytes
             ciphertext, tag = cipher.encrypt_and_digest(message_bytes)
             nonce = cipher.nonce
             json_k = [ 'name', 'nonce', 'ciphertext', 'tag' ]
             json_v = [ b64encode(x).decode('utf-8') for x in (bytes(self.name, 'utf-8'), cipher.nonce, ciphertext, tag)]
             result = json.dumps(dict(zip(json_k, json_v)))
-            print(result)
             msg = bytes(result, 'utf-8')
+            print(msg)
 
             # Type 'QUIT' to leave the chatroom
             if message == 'QUIT':
@@ -53,9 +50,6 @@ class Send(threading.Thread):
 
             # Send message to server for broadcasting
             else:
-                #formatted_msg = ('{}: {}'.format(self.name, packed_tuple).encode('ascii'))
-                #formatted_msg = bytes(f'{len(packed_tuple):<{HEADERSIZE}}', "ascii") + packed_tuple
-    
                 self.sock.sendall(msg)
 
         print('\nQuitting...')
@@ -74,16 +68,17 @@ class Receive(threading.Thread):
         self.name = name            #address of sock
 
     def run(self):    
-        #key = bytes(password, 'utf-8')        #arbitrary key for testing purposes
         while True:
             message = self.sock.recv(1024)
             try:
                 b64 = json.loads(message)
                 json_k = [ 'name', 'nonce', 'ciphertext', 'tag' ]
                 jv = {k:b64decode(b64[k]) for k in json_k}
-                cipher = AES.new(key, AES.MODE_EAX, nonce=jv['nonce'])
+                cipher = AES.new(sessionkey, AES.MODE_EAX, nonce=jv['nonce'])
                 plaintext = cipher.decrypt_and_verify(jv['ciphertext'], jv['tag'])
-                print(f"\n{jv['name'].decode('utf-8')}: " + plaintext.decode('utf-8'))
+                print(f"\n{datetime.datetime.now()} {jv['name'].decode('utf-8')}: " + plaintext.decode('utf-8'))
+                print(message)
+                
             except (ValueError, KeyError):
                 print("Incorrect decryption")
           
@@ -98,6 +93,7 @@ class Client:
         self.sock.connect((self.host, self.port))
         print('Successfully connected to {}:{}'.format(self.host, self.port))
 
+        #Mutual Authentication
         self.id = int(self.sock.recv(8))
         timestamp = int(math.ceil(time.time()))
         timestamp = int(timestamp/100)
@@ -106,6 +102,8 @@ class Client:
         rand2 = random.getrandbits(64)
         global key
         key = (random.getrandbits(64).to_bytes(16, byteorder='big')) + bytes(password, 'utf-8')
+        global sessionkey
+        sessionkey = hashlib.pbkdf2_hmac('sha256', key, b'salt', 100000)
         if(self.id == 0):
             tohash = password + str(timestamp ^ rand1)
             toverify = password + str(timestamp ^ rand2)

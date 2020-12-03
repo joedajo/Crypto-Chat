@@ -4,8 +4,7 @@ import threading
 import socket
 import argparse
 import os
-
-HEADERSIZE = 10
+import datetime
 
 class Server(threading.Thread):
 
@@ -75,10 +74,10 @@ class ServerSocket(threading.Thread):
 
     def run(self):
         while True:
-            message = self.sc.recv(1024)                   #server waits to receive a message of 1024 bytes
-            if message:                                                     #if the message isnt empty
-                print('{} says {!r}'.format(self.sockname, message))        #prints on server cmd line who said what
-                self.server.broadcast(message, self.sockname)               #broadcasts the message to all other clients
+            message = self.sc.recv(1024)                                                            #server waits to receive a message of 1024 bytes
+            if message:                                                                             #if the message isnt empty
+                print('{} sent a message at {}'.format(self.sockname, datetime.datetime.now()))      #prints on server cmd line who said what
+                self.server.broadcast(message, self.sockname)                                       #broadcasts the message to all other clients
             else:
                 # Client has closed the socket, exit the thread
                 print('{} has closed the connection'.format(self.sockname))
