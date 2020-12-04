@@ -102,8 +102,6 @@ class Client:
         rand2 = random.getrandbits(64)
         global key
         key = (random.getrandbits(64).to_bytes(16, byteorder='big')) + bytes(password, 'utf-8')
-        global sessionkey
-        sessionkey = hashlib.pbkdf2_hmac('sha256', key, b'salt', 100000)
         if(self.id == 0):
             tohash = password + str(timestamp ^ rand1)
             toverify = password + str(timestamp ^ rand2)
@@ -145,6 +143,10 @@ class Client:
             else:
                 print('Failure to authenticate. Quitting...')
                 sys.exit(0)
+        
+        #Deriving the session key        
+        global sessionkey
+        sessionkey = hashlib.pbkdf2_hmac('sha256', key, b'salt', 100000)
         print()
         name = input('Your name: ')
 
